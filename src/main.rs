@@ -1,12 +1,16 @@
 use eframe::{egui, egui::CentralPanel, egui::Context, egui::Layout, epi::App, epi::Frame};
-use reqwest::blocking;
-use serde::{Deserialize, Serialize};
-use serde_json;
+use serde::{Deserialize};
 use std::collections::HashMap;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
+struct User{
+    user_id: String,
+    user_name: String
+}
+
+#[derive(Deserialize)]
 struct Users {
-    users: Vec<String>,
+    users: Vec<User>,
 }
 
 enum AppState {
@@ -28,7 +32,26 @@ struct SecureChatApp {
     state: AppState,
     user: String,
     login_name: String,
-    available_users: Vec<String>,
+    available_users: Vec<User>,
+}
+
+
+fn get_available_users (available_users: &mut Vec<User>) {
+    match reqwest::blocking::get(
+        "https://0ibh96tdhk.execute-api.us-west-2.amazonaws.com/users",
+    ) {
+        Ok(response) => {
+            if response.status() == reqwest::StatusCode::OK {
+                match response.json::<Users>() {
+                    Ok(users) => {
+                        *available_users = users.users;
+                    }
+                    Err(e) => println!("{:?}", e),
+                }
+            }
+        }
+        Err(_) => println!("Could not make request"),
+    }
 }
 
 impl SecureChatApp {
@@ -63,25 +86,12 @@ impl SecureChatApp {
                 map.insert("lang", "rust");
                 map.insert("body", "json");
 
-                match reqwest::blocking::get(
-                    "https://0ibh96tdhk.execute-api.us-west-2.amazonaws.com/users",
-                ) {
-                    Ok(mut response) => {
-                        if response.status() == reqwest::StatusCode::OK {
-                            match response.json::<Users>() {
-                                Ok(users) => {
-                                    self.available_users = users.users;
-                                }
-                                Err(e) => println!("{:?}", e),
-                            }
-                        }
-                    }
-                    Err(_) => println!("Could not make request"),
-                }
+            get_available_users(&mut self.available_users)
+
             }
 
             for user in &self.available_users {
-                ui.heading(user);
+                ui.heading(String::from(&user.user_name) + " " + &user.user_id);
             }
         });
     }

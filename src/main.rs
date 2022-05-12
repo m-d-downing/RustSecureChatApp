@@ -1,16 +1,28 @@
 use eframe::{egui, egui::CentralPanel, egui::Context, egui::Layout, epi::App, epi::Frame};
-use serde::{Deserialize};
+use reqwest::StatusCode;
+use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Deserialize)]
-struct User{
+#[derive(Deserialize, Clone)]
+struct User {
     user_id: String,
-    user_name: String
+    user_name: String,
 }
 
 #[derive(Deserialize)]
 struct Users {
     users: Vec<User>,
+}
+#[derive(Deserialize, Clone, Debug)]
+
+struct Message {
+    message: String,
+    sent_at: String,
+}
+#[derive(Deserialize)]
+
+struct Messages {
+    messages: Vec<Message>,
 }
 
 enum AppState {
@@ -30,16 +42,16 @@ struct SecureChatApp {
     message: String,
     chat_history: String,
     state: AppState,
-    user: String,
-    login_name: String,
+    user: Option<User>,
+    count: u64,
+    users_fetched: bool,
     available_users: Vec<User>,
+    chatting_with: String,
+    messages: Vec<Message>,
 }
 
-
-fn get_available_users (available_users: &mut Vec<User>) {
-    match reqwest::blocking::get(
-        "https://0ibh96tdhk.execute-api.us-west-2.amazonaws.com/users",
-    ) {
+fn get_available_users(available_users: &mut Vec<User>) {
+    match reqwest::blocking::get("https://0ibh96tdhk.execute-api.us-west-2.amazonaws.com/users") {
         Ok(response) => {
             if response.status() == reqwest::StatusCode::OK {
                 match response.json::<Users>() {
@@ -54,8 +66,114 @@ fn get_available_users (available_users: &mut Vec<User>) {
     }
 }
 
+fn send_message(message: &str, sender: &str, recipient: &str) -> bool {
+    let mut map = HashMap::new();
+
+    map.insert("sender", sender);
+    map.insert("recipient", recipient);
+    map.insert("message", message);
+
+    let client = reqwest::blocking::Client::new();
+
+    match client
+        .post("https://0ibh96tdhk.execute-api.us-west-2.amazonaws.com/message")
+        .json(&map)
+        .send()
+    {
+        Ok(response) => {
+            if response.status() == StatusCode::OK {
+                println!("Fetched");
+                true
+            } else {
+                println!("Fetched, but fucked");
+                false
+            }
+        }
+        Err(_) => {
+            println!("Failed to update status");
+            false
+        }
+    }
+}
+
+fn get_messages(sender: &str, recipient: &str) -> Vec<Message> {
+    let mut map = HashMap::new();
+
+    map.insert("sender", sender);
+    map.insert("recipient", recipient);
+
+    let client = reqwest::blocking::Client::new();
+
+    match client
+        .post("https://0ibh96tdhk.execute-api.us-west-2.amazonaws.com/getmessages")
+        .json(&map)
+        .send()
+    {
+        Ok(response) => {
+            if response.status() == StatusCode::OK {
+                match response.json::<Messages>() {
+                    Ok(data) => return data.messages,
+                    Err(_) => todo!(),
+                }
+            }
+            return Vec::new();
+        }
+        Err(_) => todo!(),
+    }
+}
+
+fn set_user_status(status: &str, user: &mut Option<User>) -> bool {
+    let mut map = HashMap::new();
+
+    map.insert("user_id", "5cc0f84a-35b0-4331-8798-47013f9eeb40");
+    map.insert("status", status);
+
+    let client = reqwest::blocking::Client::new();
+
+    match client
+        .post("https://0ibh96tdhk.execute-api.us-west-2.amazonaws.com/status")
+        .json(&map)
+        .send()
+    {
+        Ok(response) => {
+            if response.status() == StatusCode::OK {
+                println!("Fetched");
+                match response.json::<User>() {
+                    Ok(response_user) => {
+                        *user = Some(response_user);
+                    }
+                    Err(e) => println!("{:?}", e),
+                }
+                true
+            } else {
+                println!("Server Error");
+                false
+            }
+        }
+        Err(_) => {
+            println!("Failed to update status");
+            false
+        }
+    }
+}
+
 impl SecureChatApp {
     fn render_chat(&mut self, ctx: &Context) {
+        if self.count % 200 == 0 {
+            match &self.user {
+                Some(user) => {
+                    self.messages =
+                        get_messages(user.user_id.as_str(), self.chatting_with.as_str());
+                    for message in &mut self.messages {
+                        let new_string =
+                            message.message.clone() + " " + message.sent_at.as_str() + "\n";
+                        self.chat_history += new_string.as_str()
+                    }
+                    println!("{:?}", self.messages)
+                }
+                None => todo!(),
+            }
+        }
         CentralPanel::default().show(ctx, |ui| {
             ui.with_layout(Layout::bottom_up(eframe::egui::Align::LEFT), |ui| {
                 let text_response = ui.add(
@@ -64,6 +182,23 @@ impl SecureChatApp {
                         .lock_focus(true),
                 );
                 if text_response.lost_focus() {
+                    if self.message == "" {
+                        return;
+                    }
+
+                    match &self.user {
+                        Some(user) => {
+                            send_message(
+                                self.message.as_str(),
+                                user.user_id.as_str(),
+                                self.chatting_with.as_str(),
+                            );
+                        }
+                        None => {
+                            println!("No User");
+                        }
+                    }
+
                     self.message.push('\n');
                     self.chat_history += &self.message;
                     self.message.clear();
@@ -75,32 +210,58 @@ impl SecureChatApp {
     }
     fn render_login(&mut self, ctx: &Context) {
         CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Login");
-            ui.add(
-                egui::TextEdit::singleline(&mut self.login_name)
-                    .desired_width(600.0)
-                    .lock_focus(true),
-            );
-            if ui.button("Submit").clicked() {
-                let mut map = HashMap::new();
-                map.insert("lang", "rust");
-                map.insert("body", "json");
+            ui.heading(self.count.to_string());
 
-            get_available_users(&mut self.available_users)
-
-            }
-
-            for user in &self.available_users {
-                ui.heading(String::from(&user.user_name) + " " + &user.user_id);
-            }
+            ui.vertical_centered(|ui| {
+                ui.add_space(200.0);
+                let response = ui.add_sized([200.0, 50.0], egui::Button::new("Login"));
+                if response.clicked() {
+                    if set_user_status("signedin", &mut self.user) {
+                        self.state = AppState::RenderLobby
+                    }
+                }
+            })
         });
     }
     fn render_lobby(&mut self, ctx: &Context) {
         CentralPanel::default().show(ctx, |ui| {
-            ui.heading(String::from("User: ") + &self.user);
-            ui.heading(&self.user);
-            if ui.button("Go To Chat").clicked() {
-                self.state = AppState::RenderChat
+            if self.users_fetched {
+                match &self.user {
+                    Some(user) => {
+                        ui.heading(String::from("User: ") + &user.user_name);
+                        ui.heading("Start Chat With:");
+                        for available_user in &self.available_users {
+                            // if available_user.user_id == user.user_id {
+                            //     continue;
+                            // }
+                            let response = ui.add_sized(
+                                [75.0, 35.0],
+                                egui::Button::new(String::from(&available_user.user_name)),
+                            );
+                            if response.clicked() {
+                                println!("Starting chat with {}", &available_user.user_id);
+                                self.chatting_with = available_user.user_id.clone();
+                                self.state = AppState::RenderChat;
+                            }
+                            ui.add_space(20.0)
+                        }
+
+                        ui.add_space(100.0);
+
+                        if ui.button("Log Out").clicked() {
+                            if set_user_status("signedout", &mut self.user) {
+                                self.state = AppState::RenderLobby;
+                            }
+                        }
+                    }
+                    None => {
+                        ui.heading("Error logging in user");
+                    }
+                }
+            } else {
+                ui.heading("Loading");
+                get_available_users(&mut self.available_users);
+                self.users_fetched = true
             }
         });
     }
@@ -111,7 +272,8 @@ impl App for SecureChatApp {
         "My egui App"
     }
 
-    fn update(&mut self, ctx: &Context, frame: &Frame) {
+    fn update(&mut self, ctx: &Context, _frame: &Frame) {
+        self.count = self.count + 1;
         match &self.state {
             AppState::RenderLogin => self.render_login(ctx),
             AppState::RenderChat => self.render_chat(ctx),

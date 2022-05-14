@@ -94,10 +94,10 @@ impl SecureChatApp {
         if self.count % 200 == 0 {
             match &self.user {
                 Some(user) => match &self.chatting_with {
-                    Some(recipient) => {
+                    Some(sender) => {
                         let send = self.send_messages.clone();
-                        let recipient_id = recipient.user_id.clone();
-                        let sender_id = user.user_id.clone();
+                        let recipient_id = user.user_id.clone();
+                        let sender_id = sender.user_id.clone();
                         std::thread::spawn(move || {
                             let messages = api::get_messages(sender_id, recipient_id);
                             send.send(messages).expect("Whoops!");
@@ -109,6 +109,7 @@ impl SecureChatApp {
             }
         }
         if let Ok(response) = self.recv_messages.try_recv() {
+            println!("{:?}", response);
             let mut sent_messages: Vec<DisplayMessage> = Vec::new();
             let mut recvd_messages: Vec<DisplayMessage> = Vec::new();
 
@@ -128,7 +129,7 @@ impl SecureChatApp {
             }
 
             recvd_messages.append(&mut sent_messages);
-            recvd_messages.sort_by(|a, b| a.sent_at.cmp(&b.sent_at));
+            recvd_messages.sort_by(|a, b| b.sent_at.cmp(&a.sent_at));
             self.messages = recvd_messages;
 
             self.chat_history = String::new();

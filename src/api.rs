@@ -54,6 +54,7 @@ pub fn send_message(message: &str, sender: &str, recipient: &str) -> bool {
 }
 
 pub fn get_messages(sender: String, recipient: String) -> Vec<Message> {
+    println!("{},{}", sender, recipient);
     let mut map = HashMap::new();
 
     map.insert("sender", sender);

@@ -24,6 +24,12 @@ pub struct Message {
     message: String,
     sent_at: String,
 }
+pub struct DisplayMessage {
+    message: String,
+    sent_at: String,
+    user_name: String,
+}
+
 #[derive(Deserialize)]
 
 pub struct Messages {
@@ -50,8 +56,8 @@ struct SecureChatApp {
     count: u64,
     users_fetched: bool,
     available_users: Vec<User>,
-    chatting_with: String,
-    messages: Vec<Message>,
+    chatting_with: Option<User>,
+    messages: Vec<DisplayMessage>,
     sent: Vec<Message>,
     send_messages: Sender<Vec<Message>>,
     recv_messages: Receiver<Vec<Message>>,
@@ -68,7 +74,7 @@ impl Default for SecureChatApp {
             count: 0,
             users_fetched: false,
             available_users: Vec::new(),
-            chatting_with: String::new(),
+            chatting_with: None,
             messages: Vec::new(),
             sent: Vec::new(),
             send_messages,
@@ -86,27 +92,44 @@ impl SecureChatApp {
 
     fn render_chat(&mut self, ctx: &Context) {
         if self.count % 200 == 0 {
-            println!("{:?}", self.chatting_with);
             match &self.user {
-                Some(user) => {
-                    let send = self.send_messages.clone();
-                    let recipient_id = user.user_id.clone();
-                    let sender_id = self.chatting_with.clone();
-                    std::thread::spawn(move || {
-                        let messages =
-                            api::get_messages(&sender_id.as_str(), &recipient_id.as_str());
-                        send.send(messages).expect("Whoops!");
-                    });
-                }
+                Some(user) => match &self.chatting_with {
+                    Some(recipient) => {
+                        let send = self.send_messages.clone();
+                        let recipient_id = recipient.user_id.clone();
+                        let sender_id = user.user_id.clone();
+                        std::thread::spawn(move || {
+                            let messages = api::get_messages(sender_id, recipient_id);
+                            send.send(messages).expect("Whoops!");
+                        });
+                    }
+                    None => todo!(),
+                },
                 None => todo!(),
             }
         }
-        if let Ok(mut response) = self.recv_messages.try_recv() {
-            let mut sent_messages: Vec<Message> = self.sent.clone();
-            response.append(&mut sent_messages);
-            response.sort_by(|a, b| a.sent_at.cmp(&b.sent_at));
-            println!("{:?}", response);
-            self.messages = response;
+        if let Ok(response) = self.recv_messages.try_recv() {
+            let mut sent_messages: Vec<DisplayMessage> = Vec::new();
+            let mut recvd_messages: Vec<DisplayMessage> = Vec::new();
+
+            for msg in &self.sent {
+                sent_messages.push(DisplayMessage {
+                    message: msg.message.clone(),
+                    sent_at: msg.sent_at.clone(),
+                    user_name: self.user.as_ref().unwrap().user_name.clone(),
+                })
+            }
+            for msg in response {
+                recvd_messages.push(DisplayMessage {
+                    message: msg.message,
+                    sent_at: msg.sent_at,
+                    user_name: self.chatting_with.as_ref().unwrap().user_name.clone(),
+                })
+            }
+
+            recvd_messages.append(&mut sent_messages);
+            recvd_messages.sort_by(|a, b| a.sent_at.cmp(&b.sent_at));
+            self.messages = recvd_messages;
 
             self.chat_history = String::new();
             for message in &mut self.messages {
@@ -128,13 +151,16 @@ impl SecureChatApp {
                     }
 
                     match &self.user {
-                        Some(user) => {
-                            api::send_message(
-                                self.message.as_str(),
-                                user.user_id.as_str(),
-                                self.chatting_with.as_str(),
-                            );
-                        }
+                        Some(user) => match &self.chatting_with {
+                            Some(recipient) => {
+                                api::send_message(
+                                    self.message.as_str(),
+                                    user.user_id.as_str(),
+                                    recipient.user_id.as_str(),
+                                );
+                            }
+                            None => todo!(),
+                        },
                         None => {
                             println!("No User");
                         }
@@ -147,12 +173,13 @@ impl SecureChatApp {
                             .as_millis()
                             .to_string(),
                     });
-                    self.message.push('\n');
-                    self.chat_history += &self.message;
+
                     self.message.clear();
                 }
                 text_response.request_focus();
-                ui.heading(&self.chat_history);
+                for msg in &self.messages {
+                    ui.heading(format!("[{}] {}", msg.user_name, msg.message));
+                }
             })
         });
     }
@@ -188,7 +215,7 @@ impl SecureChatApp {
                             );
                             if response.clicked() {
                                 println!("Starting chat with {}", &available_user.user_id);
-                                self.chatting_with = available_user.user_id.clone();
+                                self.chatting_with = Some(available_user.clone());
                                 self.state = AppState::RenderChat;
                             }
                             ui.add_space(20.0)

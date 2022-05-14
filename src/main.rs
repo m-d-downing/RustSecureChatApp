@@ -176,7 +176,7 @@ impl SecureChatApp {
                             .to_string(),
                     };
 
-                    let new_display_message = DisplayMessage {
+                    let mut new_display_messages: Vec<DisplayMessage> = vec![DisplayMessage {
                         message: self.message.clone(),
                         sent_at: SystemTime::now()
                             .duration_since(UNIX_EPOCH)
@@ -184,10 +184,11 @@ impl SecureChatApp {
                             .as_millis()
                             .to_string(),
                         user_name: self.user.as_ref().unwrap().user_name.clone(),
-                    };
+                    }];
 
                     self.sent.push(new_sent_message);
-                    self.messages.push(new_display_message);
+                    new_display_messages.append(&mut self.messages);
+                    self.messages = new_display_messages;
                     self.message.clear();
                 }
                 text_response.request_focus();
@@ -199,8 +200,6 @@ impl SecureChatApp {
     }
     fn render_login(&mut self, ctx: &Context) {
         CentralPanel::default().show(ctx, |ui| {
-            ui.heading(self.count.to_string());
-
             ui.vertical_centered(|ui| {
                 ui.add_space(200.0);
                 let response = ui.add_sized([200.0, 50.0], egui::Button::new("Login"));
@@ -220,9 +219,9 @@ impl SecureChatApp {
                         ui.heading(String::from("User: ") + &user.user_name);
                         ui.heading("Start Chat With:");
                         for available_user in &self.available_users {
-                            // if available_user.user_id == user.user_id {
-                            //     continue;
-                            // }
+                            if available_user.user_id == user.user_id {
+                                continue;
+                            }
                             let response = ui.add_sized(
                                 [75.0, 35.0],
                                 egui::Button::new(String::from(&available_user.user_name)),

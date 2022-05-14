@@ -166,15 +166,28 @@ impl SecureChatApp {
                             println!("No User");
                         }
                     }
-                    self.sent.push(Message {
+
+                    let new_sent_message = Message {
                         message: self.message.clone(),
                         sent_at: SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Time Error")
                             .as_millis()
                             .to_string(),
-                    });
+                    };
 
+                    let new_display_message = DisplayMessage {
+                        message: self.message.clone(),
+                        sent_at: SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("Time Error")
+                            .as_millis()
+                            .to_string(),
+                        user_name: self.user.as_ref().unwrap().user_name.clone(),
+                    };
+
+                    self.sent.push(new_sent_message);
+                    self.messages.push(new_display_message);
                     self.message.clear();
                 }
                 text_response.request_focus();

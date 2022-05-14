@@ -86,11 +86,12 @@ impl SecureChatApp {
 
     fn render_chat(&mut self, ctx: &Context) {
         if self.count % 200 == 0 {
+            println!("{:?}", self.chatting_with);
             match &self.user {
                 Some(user) => {
                     let send = self.send_messages.clone();
-                    let sender_id = user.user_id.clone();
-                    let recipient_id = self.chatting_with.clone();
+                    let recipient_id = user.user_id.clone();
+                    let sender_id = self.chatting_with.clone();
                     std::thread::spawn(move || {
                         let messages =
                             api::get_messages(&sender_id.as_str(), &recipient_id.as_str());

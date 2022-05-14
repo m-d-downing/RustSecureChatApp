@@ -1,7 +1,11 @@
 use eframe::{egui, egui::CentralPanel, egui::Context, egui::Layout, epi::App, epi::Frame};
 use reqwest::StatusCode;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::mpsc::{channel, Receiver, Sender}, time::SystemTime,
+};
+use std::time::SystemTime;
 
 #[derive(Deserialize, Clone)]
 struct User {
@@ -37,7 +41,6 @@ impl Default for AppState {
     }
 }
 
-#[derive(Default)]
 struct SecureChatApp {
     message: String,
     chat_history: String,
@@ -48,6 +51,26 @@ struct SecureChatApp {
     available_users: Vec<User>,
     chatting_with: String,
     messages: Vec<Message>,
+    sent: Vec<Message>,
+    send_messages: Sender<Vec<Message>>,
+    recv_messages: Receiver<Vec<Message>>,
+}
+
+impl Default for SecureChatApp {
+    fn default() -> Self {
+        let (send_messages, recv_messages) = channel();
+        Self{message: String::new(),
+            chat_history: String::new(),
+            state: AppState::default(),
+            user: None,
+            count: 0,
+            users_fetched: false,
+            available_users: Vec::new(),
+            chatting_with: String::new(),
+            messages:Vec::new(),
+            sent:Vec::new(),
+            send_messages, recv_messages}
+    }
 }
 
 fn get_available_users(available_users: &mut Vec<User>) {
@@ -162,18 +185,33 @@ impl SecureChatApp {
         if self.count % 200 == 0 {
             match &self.user {
                 Some(user) => {
-                    self.messages =
-                        get_messages(user.user_id.as_str(), self.chatting_with.as_str());
-                    for message in &mut self.messages {
-                        let new_string =
-                            message.message.clone() + " " + message.sent_at.as_str() + "\n";
-                        self.chat_history += new_string.as_str()
-                    }
-                    println!("{:?}", self.messages)
+                    let send = self.send_messages.clone();
+                    let sender_id = user.user_id.clone();
+                    let recipient_id = self.chatting_with.clone();
+                    std::thread::spawn(move || {
+                        let messages =
+                            get_messages(&sender_id.as_str(), &recipient_id.as_str());
+                        send.send(messages).expect("Whoops!");
+                    });
                 }
-                None => todo!(),
+             None => todo!(),
             }
-        }
+        }    
+                if let Ok(response) = self.recv_messages.try_recv() {
+            
+                            self.messages = response;
+                            for message in &mut self.messages {
+                                let new_string = message.message.clone()
+                                    + " "
+                                    + message.sent_at.as_str()
+                                    + "\n";
+                                self.chat_history += new_string.as_str();
+                                
+                            }
+                        
+                    
+                }
+        
         CentralPanel::default().show(ctx, |ui| {
             ui.with_layout(Layout::bottom_up(eframe::egui::Align::LEFT), |ui| {
                 let text_response = ui.add(
@@ -198,7 +236,7 @@ impl SecureChatApp {
                             println!("No User");
                         }
                     }
-
+                    self.sent.push(Message{message:self.message, sent_at: SystemTime::now() });
                     self.message.push('\n');
                     self.chat_history += &self.message;
                     self.message.clear();

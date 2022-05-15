@@ -1,5 +1,6 @@
 use reqwest::StatusCode;
 
+use crate::DeleteResponse;
 use crate::Message;
 use crate::Messages;
 use crate::User;
@@ -78,6 +79,34 @@ pub fn get_messages(sender: String, recipient: String) -> Vec<Message> {
                 }
             }
             return Vec::new();
+        }
+        Err(_) => todo!(),
+    }
+}
+pub fn delte_messages(sender: String, recipient: String) -> bool {
+    println!("{},{}", sender, recipient);
+    let mut map = HashMap::new();
+
+    map.insert("sender", sender);
+    map.insert("recipient", recipient);
+
+    let client = reqwest::blocking::Client::new();
+
+    match client
+        .post("https://0ibh96tdhk.execute-api.us-west-2.amazonaws.com/deleteMessages")
+        .json(&map)
+        .send()
+    {
+        Ok(response) => {
+            if response.status() == StatusCode::OK {
+                match response.json::<DeleteResponse>() {
+                    Ok(data) => {
+                        return data.success;
+                    }
+                    Err(_) => todo!(),
+                }
+            }
+            return false;
         }
         Err(_) => todo!(),
     }

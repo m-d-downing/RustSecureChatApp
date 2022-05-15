@@ -18,6 +18,12 @@ pub struct User {
 pub struct Users {
     users: Vec<User>,
 }
+#[derive(Deserialize)]
+
+pub struct DeleteResponse {
+    success: bool,
+}
+
 #[derive(Deserialize, Clone, Debug)]
 
 pub struct Message {
@@ -177,6 +183,27 @@ impl SecureChatApp {
                     self.message.clear();
                 }
                 text_response.request_focus();
+
+                let response =
+                    ui.add_sized([75.0, 35.0], egui::Button::new(String::from("End Session")));
+
+                if response.clicked() {
+                    match &self.user {
+                        Some(user) => match &self.chatting_with {
+                            Some(sender) => {
+                                let recipient_id = user.user_id.clone();
+                                let sender_id = sender.user_id.clone();
+
+                                std::thread::spawn(move || {
+                                    api::delte_messages(sender_id.clone(), recipient_id.clone());
+                                });
+                            }
+                            None => todo!(),
+                        },
+                        None => todo!(),
+                    }
+                }
+
                 for msg in &self.messages {
                     ui.heading(format!("[{}] {}", msg.user_name, msg.message));
                 }
@@ -262,7 +289,7 @@ impl SecureChatApp {
 
 impl App for SecureChatApp {
     fn name(&self) -> &str {
-        "My egui App"
+        "Downing Camera Co. SecureChat"
     }
 
     fn update(&mut self, ctx: &Context, _frame: &Frame) {

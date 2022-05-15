@@ -1,11 +1,11 @@
 mod api;
-
 use eframe::{egui, egui::CentralPanel, egui::Context, egui::Layout, epi::App, epi::Frame};
 use serde::Deserialize;
 use std::{
     env,
     sync::mpsc::{channel, Receiver, Sender},
-    time::{SystemTime, UNIX_EPOCH},
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Deserialize, Clone)]
@@ -91,23 +91,6 @@ impl SecureChatApp {
     }
 
     fn render_chat(&mut self, ctx: &Context) {
-        if self.count % 200 == 0 {
-            match &self.user {
-                Some(user) => match &self.chatting_with {
-                    Some(sender) => {
-                        let send = self.send_messages.clone();
-                        let recipient_id = user.user_id.clone();
-                        let sender_id = sender.user_id.clone();
-                        std::thread::spawn(move || {
-                            let messages = api::get_messages(sender_id, recipient_id);
-                            send.send(messages).expect("Whoops!");
-                        });
-                    }
-                    None => todo!(),
-                },
-                None => todo!(),
-            }
-        }
         if let Ok(response) = self.recv_messages.try_recv() {
             println!("{:?}", response);
             let mut sent_messages: Vec<DisplayMessage> = Vec::new();
@@ -154,11 +137,13 @@ impl SecureChatApp {
                     match &self.user {
                         Some(user) => match &self.chatting_with {
                             Some(recipient) => {
-                                api::send_message(
-                                    self.message.as_str(),
-                                    user.user_id.as_str(),
-                                    recipient.user_id.as_str(),
-                                );
+                                let message = self.message.clone();
+                                let sender = user.user_id.clone();
+                                let reciever = recipient.user_id.clone();
+
+                                std::thread::spawn(move || {
+                                    api::send_message(&message, sender.as_str(), reciever.as_str());
+                                });
                             }
                             None => todo!(),
                         },
@@ -229,6 +214,26 @@ impl SecureChatApp {
                             if response.clicked() {
                                 println!("Starting chat with {}", &available_user.user_id);
                                 self.chatting_with = Some(available_user.clone());
+                                match &self.user {
+                                    Some(user) => match &self.chatting_with {
+                                        Some(sender) => {
+                                            let send = self.send_messages.clone();
+                                            let recipient_id = user.user_id.clone();
+                                            let sender_id = sender.user_id.clone();
+
+                                            std::thread::spawn(move || loop {
+                                                let messages = api::get_messages(
+                                                    sender_id.clone(),
+                                                    recipient_id.clone(),
+                                                );
+                                                send.send(messages).expect("Whoops!");
+                                                thread::sleep(Duration::from_secs(5))
+                                            });
+                                        }
+                                        None => todo!(),
+                                    },
+                                    None => todo!(),
+                                }
                                 self.state = AppState::RenderChat;
                             }
                             ui.add_space(20.0)

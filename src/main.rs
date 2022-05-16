@@ -15,6 +15,7 @@ use rsa::{
     PaddingScheme, PublicKey, RsaPrivateKey, RsaPublicKey,
 };
 use serde::Deserialize;
+use serde_json::json;
 use std::{
     env,
     sync::mpsc::{channel, Receiver, Sender},
@@ -40,21 +41,16 @@ pub struct DeleteResponse {
 }
 #[derive(Deserialize)]
 
-pub struct EncodedMessage {
-    message: Vec<u8>,
-    sent_at: String,
-}
-#[derive(Deserialize)]
-
-pub struct EncodedMessages {
-    messages: Vec<EncodedMessage>,
-}
-#[derive(Deserialize, Clone, Debug)]
-
 pub struct Message {
     message: String,
     sent_at: String,
 }
+#[derive(Deserialize)]
+
+pub struct Messages {
+    messages: Vec<Message>,
+}
+
 pub struct DisplayMessage {
     message: String,
     sent_at: String,
@@ -62,10 +58,6 @@ pub struct DisplayMessage {
 }
 
 #[derive(Deserialize)]
-
-pub struct Messages {
-    messages: Vec<Message>,
-}
 
 enum AppState {
     RenderLogin,
@@ -90,8 +82,8 @@ struct SecureChatApp {
     chatting_with: Option<User>,
     messages: Vec<DisplayMessage>,
     sent: Vec<Message>,
-    send_messages: Sender<Vec<EncodedMessage>>,
-    recv_messages: Receiver<Vec<EncodedMessage>>,
+    send_messages: Sender<Vec<Message>>,
+    recv_messages: Receiver<Vec<Message>>,
     public_key: rsa::RsaPublicKey,
     private_key: rsa::RsaPrivateKey,
 }
@@ -148,10 +140,11 @@ impl SecureChatApp {
             }
             for msg in response {
                 let padding = PaddingScheme::new_pkcs1v15_encrypt();
-
+                println!("{:?}", msg.message);
+                let enc_data: Vec<u8> = serde_json::from_str(msg.message.as_str()).unwrap();
                 let dec_data = self
                     .private_key
-                    .decrypt(padding, &msg.message)
+                    .decrypt(padding, &enc_data)
                     .expect("failed to decrpyt");
 
                 let decoded_string = String::from_utf8(dec_data).expect("Failed to decode string");
@@ -215,7 +208,7 @@ impl SecureChatApp {
                                 let message = self.message.clone();
                                 let sender = user.user_id.clone();
                                 let reciever = recipient.user_id.clone();
-                                let pub_key =  recipient.public_key.clone();
+                                let pub_key = recipient.public_key.clone();
 
                                 std::thread::spawn(move || {
                                     api::send_message(
@@ -335,6 +328,10 @@ impl SecureChatApp {
                                 self.state = AppState::RenderLobby;
                             }
                         }
+
+                        if ui.button("Refresh").clicked() {
+                            api::get_available_users(&mut self.available_users);
+                        }
                     }
                     None => {
                         ui.heading("Error logging in user");
@@ -365,34 +362,6 @@ impl App for SecureChatApp {
 }
 
 fn main() {
-    let mut rng = rand::thread_rng();
-
-    let bits = 2048;
-    let private_key = rsa::RsaPrivateKey::new(&mut rng, bits).expect("Failed to generate key");
-    let public_key = rsa::RsaPublicKey::from(&private_key);
-
-    let pem = public_key.to_public_key_pem(LineEnding::CRLF).unwrap();
-
-    let public_key_copy = rsa::RsaPublicKey::from_public_key_pem(pem.as_str()).unwrap();
-
-    let data = b"Hello world";
-
-    let padding = PaddingScheme::new_pkcs1v15_encrypt();
-
-    let enc_data = public_key_copy
-        .encrypt(&mut rng, padding, &data[..])
-        .expect("Failed to encrypt");
-
-    let padding = PaddingScheme::new_pkcs1v15_encrypt();
-
-    let dec_data = private_key
-        .decrypt(padding, &enc_data)
-        .expect("failed to decrpyt");
-
-    let decoded_string = String::from_utf8(dec_data);
-
-    println!("{:?}", decoded_string);
-
     let user_id = match env::var_os("CAPSTONE_CHAT_ID") {
         Some(v) => v.into_string().unwrap(),
         None => panic!("$USER is not set"),
@@ -403,6 +372,8 @@ fn main() {
     };
 
     let app = SecureChatApp::new(user_id, user_name);
-    let native_options = eframe::NativeOptions::default();
+    let mut native_options = eframe::NativeOptions::default();
+    native_options.decorated = false;
+
     eframe::run_native(Box::new(app), native_options);
 }

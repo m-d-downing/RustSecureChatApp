@@ -1,6 +1,6 @@
 use crate::DeleteResponse;
-use crate::EncodedMessage;
-use crate::EncodedMessages;
+use crate::Message;
+use crate::Messages;
 use crate::User;
 use crate::Users;
 use rand;
@@ -66,7 +66,7 @@ pub fn send_message(message: &str, sender: &str, recipient: &str, public_key_str
     }
 }
 
-pub fn get_messages(sender: String, recipient: String) -> Vec<EncodedMessage> {
+pub fn get_messages(sender: String, recipient: String) -> Vec<Message> {
     println!("{},{}", sender, recipient);
     let mut map = HashMap::new();
 
@@ -82,7 +82,7 @@ pub fn get_messages(sender: String, recipient: String) -> Vec<EncodedMessage> {
     {
         Ok(response) => {
             if response.status() == StatusCode::OK {
-                match response.json::<EncodedMessages>() {
+                match response.json::<Messages>() {
                     Ok(data) => {
                         return data.messages;
                     }

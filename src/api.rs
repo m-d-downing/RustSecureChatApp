@@ -1,10 +1,12 @@
-use reqwest::StatusCode;
-
 use crate::DeleteResponse;
-use crate::Message;
-use crate::Messages;
+use crate::EncodedMessage;
+use crate::EncodedMessages;
 use crate::User;
 use crate::Users;
+use rand;
+use reqwest::StatusCode;
+use rsa::pkcs8::DecodePublicKey;
+use rsa::{self, PaddingScheme, PublicKey};
 
 use std::collections::HashMap;
 
@@ -24,12 +26,22 @@ pub fn get_available_users(available_users: &mut Vec<User>) {
     }
 }
 
-pub fn send_message(message: &str, sender: &str, recipient: &str) -> bool {
-    let mut map = HashMap::new();
+pub fn send_message(message: &str, sender: &str, recipient: &str, public_key_str: &str) -> bool {
+    let mut rng = rand::thread_rng();
 
+    let bits = 2048;
+    let padding = PaddingScheme::new_pkcs1v15_encrypt();
+
+    let public_key = rsa::RsaPublicKey::from_public_key_pem(public_key_str).unwrap();
+    let enc_data = public_key
+        .encrypt(&mut rng, padding, &message.as_bytes())
+        .expect("Failed to encrypt");
+
+    let mut map = HashMap::new();
+    let encoded_message = format!("{:?}", enc_data);
     map.insert("sender", sender);
     map.insert("recipient", recipient);
-    map.insert("message", message);
+    map.insert("message", &encoded_message.as_str());
 
     let client = reqwest::blocking::Client::new();
 
@@ -54,7 +66,7 @@ pub fn send_message(message: &str, sender: &str, recipient: &str) -> bool {
     }
 }
 
-pub fn get_messages(sender: String, recipient: String) -> Vec<Message> {
+pub fn get_messages(sender: String, recipient: String) -> Vec<EncodedMessage> {
     println!("{},{}", sender, recipient);
     let mut map = HashMap::new();
 
@@ -70,9 +82,8 @@ pub fn get_messages(sender: String, recipient: String) -> Vec<Message> {
     {
         Ok(response) => {
             if response.status() == StatusCode::OK {
-                match response.json::<Messages>() {
+                match response.json::<EncodedMessages>() {
                     Ok(data) => {
-                        println!("{:?}", data.messages);
                         return data.messages;
                     }
                     Err(_) => todo!(),
@@ -83,8 +94,7 @@ pub fn get_messages(sender: String, recipient: String) -> Vec<Message> {
         Err(_) => todo!(),
     }
 }
-pub fn delte_messages(sender: String, recipient: String) -> bool {
-    println!("{},{}", sender, recipient);
+pub fn delete_messages(sender: String, recipient: String) -> bool {
     let mut map = HashMap::new();
 
     map.insert("sender", sender);
@@ -98,6 +108,7 @@ pub fn delte_messages(sender: String, recipient: String) -> bool {
         .send()
     {
         Ok(response) => {
+            println!("{:?}", response);
             if response.status() == StatusCode::OK {
                 match response.json::<DeleteResponse>() {
                     Ok(data) => {
@@ -112,14 +123,14 @@ pub fn delte_messages(sender: String, recipient: String) -> bool {
     }
 }
 
-pub fn set_user_status(status: &str, user: &mut Option<User>) -> bool {
+pub fn set_user_status(key: &str, user: &mut Option<User>) -> bool {
     match user {
         Some(usr) => {
             let mut map = HashMap::new();
-            let user_status = String::from(status);
+            let pub_key = String::from(key);
 
             map.insert("user_id", &usr.user_id);
-            map.insert("status", &user_status);
+            map.insert("key", &pub_key);
 
             let client = reqwest::blocking::Client::new();
 

@@ -132,7 +132,6 @@ impl SecureChatApp {
             }
             for msg in response {
                 let padding = PaddingScheme::new_pkcs1v15_encrypt();
-                println!("{:?}", msg.message);
                 let enc_data: Vec<u8> = serde_json::from_str(msg.message.as_str()).unwrap();
                 let dec_data = self
                     .private_key
@@ -290,7 +289,6 @@ impl SecureChatApp {
                                 egui::Button::new(String::from(&available_user.user_name)),
                             );
                             if response.clicked() {
-                                println!("Starting chat with {}", &available_user.user_id);
                                 self.chatting_with = Some(available_user.clone());
                                 match &self.user {
                                     Some(user) => match &self.chatting_with {

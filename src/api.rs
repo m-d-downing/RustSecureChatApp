@@ -51,10 +51,9 @@ pub fn send_message(message: &str, sender: &str, recipient: &str, public_key_str
     {
         Ok(response) => {
             if response.status() == StatusCode::OK {
-                println!("Fetched");
                 true
             } else {
-                println!("Fetched, but fucked");
+                println!("Failed to update status");
                 false
             }
         }
@@ -107,7 +106,6 @@ pub fn delete_messages(sender: String, recipient: String) -> bool {
         .send()
     {
         Ok(response) => {
-            println!("{:?}", response);
             if response.status() == StatusCode::OK {
                 match response.json::<DeleteResponse>() {
                     Ok(data) => {

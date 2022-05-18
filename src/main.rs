@@ -355,11 +355,11 @@ impl App for SecureChatApp {
 }
 
 fn main() {
-    let user_id = match env::var_os("CAPSTONE_CHAT_ID") {
+    let user_id = match env::var_os("CHAT_ID") {
         Some(v) => v.into_string().unwrap(),
         None => panic!("$USER is not set"),
     };
-    let user_name = match env::var_os("CAPSTONE_CHAT_NAME") {
+    let user_name = match env::var_os("CHAT_NAME") {
         Some(v) => v.into_string().unwrap(),
         None => panic!("$USER is not set"),
     };

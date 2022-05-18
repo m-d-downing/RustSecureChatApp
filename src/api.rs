@@ -32,6 +32,7 @@ pub fn send_message(message: &str, sender: &str, recipient: &str, public_key_str
     let padding = PaddingScheme::new_pkcs1v15_encrypt();
 
     let public_key = rsa::RsaPublicKey::from_public_key_pem(public_key_str).unwrap();
+
     let enc_data = public_key
         .encrypt(&mut rng, padding, &message.as_bytes())
         .expect("Failed to encrypt");

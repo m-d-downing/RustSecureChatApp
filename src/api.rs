@@ -29,7 +29,6 @@ pub fn get_available_users(available_users: &mut Vec<User>) {
 pub fn send_message(message: &str, sender: &str, recipient: &str, public_key_str: &str) -> bool {
     let mut rng = rand::thread_rng();
 
-    let bits = 2048;
     let padding = PaddingScheme::new_pkcs1v15_encrypt();
 
     let public_key = rsa::RsaPublicKey::from_public_key_pem(public_key_str).unwrap();
@@ -123,7 +122,12 @@ pub fn delete_messages(sender: String, recipient: String) -> bool {
     }
 }
 
-pub fn set_user_status(key: &str, user: &mut Option<User>) -> bool {
+pub fn set_user_status(key: &str, user: &mut Option<User>, available: bool) -> bool {
+    let status = if available {
+        String::from("signin")
+    } else {
+        String::from("signout")
+    };
     match user {
         Some(usr) => {
             let mut map = HashMap::new();
@@ -131,7 +135,7 @@ pub fn set_user_status(key: &str, user: &mut Option<User>) -> bool {
 
             map.insert("user_id", &usr.user_id);
             map.insert("key", &pub_key);
-
+            map.insert("status", &status);
             let client = reqwest::blocking::Client::new();
 
             match client
@@ -141,13 +145,6 @@ pub fn set_user_status(key: &str, user: &mut Option<User>) -> bool {
             {
                 Ok(response) => {
                     if response.status() == StatusCode::OK {
-                        println!("Fetched");
-                        match response.json::<User>() {
-                            Ok(response_user) => {
-                                *user = Some(response_user);
-                            }
-                            Err(e) => println!("{:?}", e),
-                        }
                         true
                     } else {
                         println!("Server Error");

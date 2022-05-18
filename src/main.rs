@@ -1,23 +1,15 @@
 mod api;
-use eframe::{
-    egui,
-    egui::CentralPanel,
-    egui::Context,
-    egui::{plot::Line, Layout},
-    epi::App,
-    epi::Frame,
-};
+use eframe::{egui, egui::CentralPanel, egui::Context, egui::Layout, epi::App, epi::Frame};
 use rand;
 use rsa::{
     self,
-    pkcs1::DecodeRsaPublicKey,
-    pkcs8::{DecodePublicKey, EncodePublicKey, LineEnding},
-    PaddingScheme, PublicKey, RsaPrivateKey, RsaPublicKey,
+    pkcs8::{EncodePublicKey, LineEnding},
+    PaddingScheme,
 };
 use serde::Deserialize;
-use serde_json::json;
 use std::{
     env,
+    process::exit,
     sync::mpsc::{channel, Receiver, Sender},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -262,17 +254,22 @@ impl SecureChatApp {
         CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(200.0);
-                let response = ui.add_sized([200.0, 50.0], egui::Button::new("Login"));
-                if response.clicked() {
+                let login_response = ui.add_sized([200.0, 50.0], egui::Button::new("Login"));
+                if login_response.clicked() {
                     if api::set_user_status(
                         self.public_key
                             .to_public_key_pem(LineEnding::CRLF)
                             .unwrap()
                             .as_str(),
                         &mut self.user,
+                        true,
                     ) {
                         self.state = AppState::RenderLobby
                     }
+                }
+                let login_response = ui.add_sized([200.0, 50.0], egui::Button::new("Exit"));
+                if login_response.clicked() {
+                    exit(0);
                 }
             })
         });
@@ -301,7 +298,6 @@ impl SecureChatApp {
                                             let send = self.send_messages.clone();
                                             let recipient_id = user.user_id.clone();
                                             let sender_id = sender.user_id.clone();
-                                            let private_key = self.private_key.clone();
 
                                             std::thread::spawn(move || loop {
                                                 let messages = api::get_messages(
@@ -324,9 +320,8 @@ impl SecureChatApp {
                         ui.add_space(100.0);
 
                         if ui.button("Log Out").clicked() {
-                            if api::set_user_status("signedout", &mut self.user) {
-                                self.state = AppState::RenderLobby;
-                            }
+                            api::set_user_status("", &mut self.user, false);
+                            self.state = AppState::RenderLogin;
                         }
 
                         if ui.button("Refresh").clicked() {
